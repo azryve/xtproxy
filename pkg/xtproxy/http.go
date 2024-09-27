@@ -3,9 +3,11 @@ package xtproxy
 import (
 	"io/fs"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,13 +35,27 @@ func (m *XTProxyHTTP) init() error {
 	httpFs := afero.NewHttpFs(m.Fs)
 	fileServer := http.FileServer(httpFs)
 	mux := http.NewServeMux()
-	mux.Handle("/", fileServer)
+	mux.Handle("/", LoggingMiddleware(ContentTypeMiddleware(fileServer)))
 	m.server = &http.Server{
 		Handler:     mux,
 		ReadTimeout: 3 * time.Second,
 		IdleTimeout: 10 * time.Second,
 	}
 	return nil
+}
+
+// ContentTypeMiddleware sets a content type manually
+// preventing trying to seek in case its not supported by underlying fs (another http for example)
+func ContentTypeMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fileExt := filepath.Ext(r.URL.Path)
+		mimeType := mime.TypeByExtension(fileExt)
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
+		w.Header().Set("Content-Type", mimeType)
+		next.ServeHTTP(w, r)
+	})
 }
 
 // LoggingMiddleware is a middleware that logs the request details
