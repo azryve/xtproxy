@@ -24,6 +24,7 @@ It helps when:
 ## Known Limitations
 
 * No client authentication.
+* No directory listing.
 * Limited testing.
 * No upload capability.
 
