@@ -10,7 +10,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/azryve/xtproxy/pkg/aferomount"
 	"github.com/azryve/xtproxy/pkg/xtproxy"
 
 	"github.com/spf13/afero"
@@ -23,6 +22,7 @@ var ifacesListen []string
 var ftpPort = 21
 var tftpPort = 69
 var httpPort = 80
+var webdavHandle = "/.webdav"
 var defaultAddr = netip.MustParseAddr("::")
 var errUsage = errors.New("error usage")
 
@@ -46,6 +46,7 @@ func init() {
 	rootCmd.Flags().IntVar(&ftpPort, "port-ftp", ftpPort, "ftp tcp port")
 	rootCmd.Flags().IntVar(&tftpPort, "port-tftp", tftpPort, "tftp udp port")
 	rootCmd.Flags().IntVar(&httpPort, "port-http", httpPort, "http tcp port")
+	rootCmd.Flags().StringVar(&webdavHandle, "webdav-handle", webdavHandle, "webdav handle for http server")
 	// disabled until testing
 	// rootCmd.Flags().BoolVar(&writableFlag, "writable", false, "allow uploading")
 }
@@ -143,11 +144,11 @@ func mainServe(args []string) error {
 		}
 		args = []string{mountVal}
 	}
+	opts := make([]xtproxy.XTProxyOpt, 0)
 	mounts, err := setupMountFs(args)
 	if err != nil {
 		return err
 	}
-	rootfs := aferomount.NewMountFS(afero.NewMemMapFs())
 	if !writableFlag {
 		for i, m := range mounts {
 			mounts[i].Fs = afero.NewReadOnlyFs(m.Fs)
@@ -155,13 +156,12 @@ func mainServe(args []string) error {
 	}
 	for _, m := range mounts {
 		log.Printf("mounts %s -> %s\n", masked(m.URL).String(), m.Path)
-		rootfs.Mount(m.Fs, m.Path)
+		opts = append(opts, xtproxy.WithMount(m.Fs, m.Path))
 	}
 	listenaddrs, err := setupListenAddrs()
 	if err != nil {
 		return err
 	}
-	opts := make([]xtproxy.XTProxyOpt, 0)
 	for _, addrport := range listenaddrs {
 		switch int(addrport.Port()) {
 		case ftpPort:
@@ -177,7 +177,10 @@ func mainServe(args []string) error {
 			return fmt.Errorf("unknown port %d: %s", int(addrport.Port()), errUsage)
 		}
 	}
-	fproxy, err := xtproxy.NewXTProxy(rootfs, opts...)
+	if webdavHandle != "" {
+		opts = append(opts, xtproxy.WithWebdavHandle(webdavHandle))
+	}
+	fproxy, err := xtproxy.NewXTProxy(opts...)
 	if err != nil {
 		return err
 	}

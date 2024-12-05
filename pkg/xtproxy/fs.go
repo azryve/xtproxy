@@ -23,10 +23,10 @@ func FsByURL(rawURL string) (afero.Fs, error) {
 		fs = fileURL{URL}
 	case "s3":
 		fs = s3URL{URL}
-	case "http":
+	case "http", "https":
 		fs = httpURL{URL}
-	case "https":
-		fs = httpURL{URL}
+	case "webdav", "webdavs":
+		fs = webdavURL{URL}
 	default:
 		return nil, errors.New("unknown scheme")
 	}

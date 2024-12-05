@@ -11,31 +11,59 @@ import (
 	"strings"
 	"time"
 
+	"github.com/azryve/xtproxy/pkg/aferowebdav"
 	"github.com/hairyhenderson/go-fsimpl/httpfs"
 	"github.com/spf13/afero"
+	"github.com/studio-b12/gowebdav"
+	"golang.org/x/net/webdav"
 )
 
-type XTProxyHTTP struct {
-	Fs       afero.Fs
-	Listener *net.TCPListener
-	server   *http.Server
+type XTProxyHTTPWebdav struct {
+	Fs           afero.Fs
+	Listener     *net.TCPListener
+	WebdavHandle string
+	server       *http.Server
 }
 
-func (m *XTProxyHTTP) Wait() error {
+func (m *XTProxyHTTPWebdav) Wait() error {
 	if err := m.init(); err != nil {
 		return err
 	}
 	return m.server.Serve(m.Listener)
 }
 
-func (m *XTProxyHTTP) init() error {
+func (m *XTProxyHTTPWebdav) init() error {
 	if m.server != nil {
 		return nil
 	}
-	httpFs := afero.NewHttpFs(m.Fs)
-	fileServer := http.FileServer(httpFs)
 	mux := http.NewServeMux()
-	mux.Handle("/", LoggingMiddleware(ContentTypeMiddleware(fileServer)))
+
+	// setup basic http file server for /
+	httpFs := afero.NewHttpFs(m.Fs)
+	httpHandler := http.FileServer(httpFs)
+	httpHandler = ContentTypeMiddleware(httpHandler)
+	httpHandler = LoggingMiddleware(httpHandler)
+	mux.Handle("/", httpHandler)
+
+	// setup webdav file server for /<webdavHandle>
+	if m.WebdavHandle != "" {
+		webdavHandle := m.WebdavHandle
+		if !strings.HasPrefix(webdavHandle, "/") {
+			webdavHandle = "/" + webdavHandle
+		}
+		if !strings.HasSuffix(webdavHandle, "/") {
+			webdavHandle += "/"
+		}
+		webdavFs := aferowebdav.NewWebdavFs(m.Fs)
+		var webdavHandler http.Handler = &webdav.Handler{
+			Prefix:     webdavHandle,
+			FileSystem: webdavFs,
+			LockSystem: webdav.NewMemLS(),
+		}
+		webdavHandler = LoggingMiddleware(webdavHandler)
+		mux.Handle(webdavHandle, webdavHandler)
+	}
+
 	m.server = &http.Server{
 		Handler:     mux,
 		ReadTimeout: 3 * time.Second,
@@ -110,4 +138,27 @@ type fsTrimPrefix struct {
 
 func (m *fsTrimPrefix) Open(name string) (fs.File, error) {
 	return m.FS.Open(strings.TrimPrefix(name, "/"))
+}
+
+type webdavURL struct {
+	URL *url.URL
+}
+
+func (m webdavURL) Fs() (afero.Fs, error) {
+	if m.URL == nil {
+		return nil, ErrInvalidURL
+	}
+	httpUrl := *m.URL
+	switch m.URL.Scheme {
+	case "webdav":
+		httpUrl.Scheme = "http"
+	case "webdavs":
+		httpUrl.Scheme = "https"
+	default:
+		return nil, ErrInvalidURL
+	}
+	user := m.URL.User.Username()
+	pass, _ := m.URL.User.Password()
+	client := gowebdav.NewClient(httpUrl.String(), user, pass)
+	return aferowebdav.NewFs(client), nil
 }
