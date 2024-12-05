@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 
+	"github.com/azryve/xtproxy/pkg/aferomount"
 	"github.com/spf13/afero"
 	"golang.org/x/sync/errgroup"
 )
@@ -13,14 +14,15 @@ type waiter interface {
 }
 
 type XTProxy struct {
-	Fs      afero.Fs
+	mountfs *aferomount.MountFs
 	waiters []waiter
+	http    *XTProxyHTTPWebdav
 }
 type XTProxyOpt func(m *XTProxy) error
 
-func NewXTProxy(fs afero.Fs, opts ...XTProxyOpt) (*XTProxy, error) {
+func NewXTProxy(opts ...XTProxyOpt) (*XTProxy, error) {
 	fproxy := &XTProxy{
-		Fs:      fs,
+		mountfs: aferomount.NewMountFS(afero.NewMemMapFs()),
 		waiters: make([]waiter, 0),
 	}
 	for _, opt := range opts {
@@ -44,7 +46,7 @@ func (m *XTProxy) Wait() error {
 
 func WithFTPAddr(addr *net.TCPAddr) XTProxyOpt {
 	return func(m *XTProxy) error {
-		ftp := &XTProxyFTP{Fs: m.Fs, ListenAddr: addr}
+		ftp := &XTProxyFTP{Fs: m.mountfs, ListenAddr: addr}
 		m.waiters = append(m.waiters, ftp)
 		return nil
 	}
@@ -52,7 +54,7 @@ func WithFTPAddr(addr *net.TCPAddr) XTProxyOpt {
 
 func WithTFTPAddr(addr *net.UDPAddr) XTProxyOpt {
 	return func(m *XTProxy) error {
-		tftp := &XTProxyTFTP{Fs: m.Fs, ListenAddr: addr}
+		tftp := &XTProxyTFTP{Fs: m.mountfs, ListenAddr: addr}
 		m.waiters = append(m.waiters, tftp)
 		return nil
 	}
@@ -64,8 +66,27 @@ func WithHTTPAddr(addr *net.TCPAddr) XTProxyOpt {
 		if err != nil {
 			return err
 		}
-		http := &XTProxyHTTP{Fs: m.Fs, Listener: listener}
-		m.waiters = append(m.waiters, http)
+		if m.http == nil {
+			m.http = &XTProxyHTTPWebdav{Fs: m.mountfs}
+		}
+		m.http.Listener = listener
+		m.waiters = append(m.waiters, m.http)
 		return nil
+	}
+}
+
+func WithWebdavHandle(webdavHandle string) XTProxyOpt {
+	return func(m *XTProxy) error {
+		if m.http == nil {
+			m.http = &XTProxyHTTPWebdav{Fs: m.mountfs}
+		}
+		m.http.WebdavHandle = webdavHandle
+		return nil
+	}
+}
+
+func WithMount(fs afero.Fs, path string) XTProxyOpt {
+	return func(m *XTProxy) error {
+		return m.mountfs.Mount(fs, path)
 	}
 }

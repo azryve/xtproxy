@@ -13,6 +13,8 @@ require (
 	github.com/spf13/afero v1.11.0
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.9.0
+	github.com/studio-b12/gowebdav v0.9.0
+	golang.org/x/net v0.26.0
 	golang.org/x/sync v0.8.0
 )
 

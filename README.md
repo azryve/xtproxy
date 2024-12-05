@@ -16,8 +16,8 @@ It helps when:
 
 ## Features
 
-* Serves files simultaneously with FTP/TFTP/HTTP.
-* Sources files from S3 bucket/HTTP file share/local directory.
+* Serves files simultaneously with FTP/TFTP/HTTP/Webdav.
+* Sources files from S3 bucket/HTTP/Webdav file share/local directory.
 * Can combine multiple sources of files.
 * Supports IPv4/IPv6.
 
@@ -47,4 +47,19 @@ export XTPROXY_S3_CREDENTIALS="ACCESSKEYID:secretaccesskeyvalue"
 ./xtproxy \
   "s3://s3.amazonaws.com/eu-north-1/myownbucket /" \
   "file:///var/spool/localfileshare /localfileshare"
+```
+
+### daisy chain xtproxy -> xtproxy via webdav
+
+Sometimes its useful to have an additional proxy layer.
+It can be achived by daisy chaining two instances via webdav.
+
+```
+# serves data from s3 and runs in aws
+user@aws-vm1:~$ xtproxy "s3://s3.amazonaws.com/eu-north-1/myownbucket /"
+```
+
+```
+# runs on remote site and serves data from aws-vm proxy
+user@remotesite1:~$ xtproxy "webdav://aws-vm1.example.com/.webdav /"
 ```
