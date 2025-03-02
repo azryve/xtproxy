@@ -3,7 +3,10 @@ package xtproxy
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"path"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -46,7 +49,8 @@ func (m s3URL) Fs() (afero.Fs, error) {
 	if err != nil {
 		return nil, err
 	}
-	return afero_s3.NewFs(params.Bucket, sess), nil
+	fs := afero_s3.NewFs(params.Bucket, sess)
+	return &s3FsRootDirHack{fs}, nil
 }
 
 func fsSchemeS3Params(u *url.URL) (s3Params, error) {
@@ -62,4 +66,34 @@ func fsSchemeS3Params(u *url.URL) (s3Params, error) {
 		AccessKey: u.User.Username(),
 		Secret:    secret,
 	}, nil
+}
+
+// s3FsRootDirHack is nessesary to fix listing of top-level dir
+// https://github.com/fclairamb/afero-s3/issues/599
+// https://github.com/fclairamb/afero-s3/pull/393
+type s3FsRootDirHack struct {
+	afero.Fs
+}
+
+type s3FileRootDirHack struct {
+	afero.File
+	fs *s3FsRootDirHack
+}
+
+func (m *s3FsRootDirHack) Stat(name string) (os.FileInfo, error) {
+	if path.Clean(name) == "/" {
+		// taken from afero_s3.Fs.statDirectory()
+		// https://github.com/fclairamb/afero-s3/commit/f84ed0c82b7245f182c3526acfd091725268ccae#diff-b4c63e1a6441951419600996e574b54527abe6f23c7b90bfa68e8ac1348ffc8eR270
+		return afero_s3.NewFileInfo(path.Base(name), true, 0, time.Unix(0, 0)), nil
+	}
+	return m.Fs.Stat(name)
+}
+
+func (m *s3FsRootDirHack) Open(name string) (afero.File, error) {
+	f, err := m.Fs.Open(name)
+	return &s3FileRootDirHack{File: f, fs: m}, err
+}
+
+func (m *s3FileRootDirHack) Stat() (os.FileInfo, error) {
+	return m.fs.Stat(m.File.Name())
 }
