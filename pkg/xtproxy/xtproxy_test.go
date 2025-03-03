@@ -101,12 +101,13 @@ func TestHTTPToWebdav(t *testing.T) {
 func xtproxyHttpProxyForTest(t *testing.T, fs afero.Fs, webdavHandle string) (*XTProxy, net.Addr) {
 	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
 	assert.NoError(t, err)
+	l, err := net.ListenTCP("tcp", addr)
+	assert.NoError(t, err)
 
 	xt, err := NewXTProxy(
-		WithHTTPAddr(addr),
-		WithWebdavHandle(webdavHandle),
+		WithHTTPWebdavListener(l, webdavHandle),
 		WithMount(fs, "/"),
 	)
 	assert.NoError(t, err)
-	return xt, xt.http.Listener.Addr()
+	return xt, l.Addr()
 }

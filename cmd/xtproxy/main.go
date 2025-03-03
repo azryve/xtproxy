@@ -172,13 +172,10 @@ func mainServe(args []string) error {
 			opts = append(opts, xtproxy.WithTFTPAddr(udpaddr))
 		case httpPort:
 			tcpaddr := net.TCPAddrFromAddrPort(addrport)
-			opts = append(opts, xtproxy.WithHTTPAddr(tcpaddr))
+			opts = append(opts, xtproxy.WithHTTPWebdavAddr(tcpaddr, webdavHandle))
 		default:
 			return fmt.Errorf("unknown port %d: %s", int(addrport.Port()), errUsage)
 		}
-	}
-	if webdavHandle != "" {
-		opts = append(opts, xtproxy.WithWebdavHandle(webdavHandle))
 	}
 	fproxy, err := xtproxy.NewXTProxy(opts...)
 	if err != nil {

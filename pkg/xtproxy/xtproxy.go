@@ -16,7 +16,6 @@ type waiter interface {
 type XTProxy struct {
 	mountfs *aferomount.MountFs
 	waiters []waiter
-	http    *XTProxyHTTPWebdav
 }
 type XTProxyOpt func(m *XTProxy) error
 
@@ -60,27 +59,24 @@ func WithTFTPAddr(addr *net.UDPAddr) XTProxyOpt {
 	}
 }
 
-func WithHTTPAddr(addr *net.TCPAddr) XTProxyOpt {
+func WithHTTPWebdavAddr(addr *net.TCPAddr, webdavHandle string) XTProxyOpt {
 	return func(m *XTProxy) error {
 		listener, err := net.ListenTCP("tcp", addr)
 		if err != nil {
 			return err
 		}
-		if m.http == nil {
-			m.http = &XTProxyHTTPWebdav{Fs: m.mountfs}
-		}
-		m.http.Listener = listener
-		m.waiters = append(m.waiters, m.http)
-		return nil
+		return WithHTTPWebdavListener(listener, webdavHandle)(m)
 	}
 }
 
-func WithWebdavHandle(webdavHandle string) XTProxyOpt {
+func WithHTTPWebdavListener(listener *net.TCPListener, webdavHandle string) XTProxyOpt {
 	return func(m *XTProxy) error {
-		if m.http == nil {
-			m.http = &XTProxyHTTPWebdav{Fs: m.mountfs}
+		http := &XTProxyHTTPWebdav{
+			Fs:           m.mountfs,
+			WebdavHandle: webdavHandle,
+			Listener:     listener,
 		}
-		m.http.WebdavHandle = webdavHandle
+		m.waiters = append(m.waiters, http)
 		return nil
 	}
 }
