@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/azryve/xtproxy/pkg/xtproxy"
@@ -112,6 +113,9 @@ func setupListenAddrs() ([]netip.AddrPort, error) {
 			listenaddrs = append(listenaddrs, netip.AddrPortFrom(ip, uint16(httpPort)))
 		}
 	}
+	listenaddrs = slices.DeleteFunc(listenaddrs, func(addr netip.AddrPort) bool {
+		return addr.Port() == 0
+	})
 	return listenaddrs, nil
 }
 
@@ -172,13 +176,10 @@ func mainServe(args []string) error {
 			opts = append(opts, xtproxy.WithTFTPAddr(udpaddr))
 		case httpPort:
 			tcpaddr := net.TCPAddrFromAddrPort(addrport)
-			opts = append(opts, xtproxy.WithHTTPAddr(tcpaddr))
+			opts = append(opts, xtproxy.WithHTTPWebdavAddr(tcpaddr, webdavHandle))
 		default:
 			return fmt.Errorf("unknown port %d: %s", int(addrport.Port()), errUsage)
 		}
-	}
-	if webdavHandle != "" {
-		opts = append(opts, xtproxy.WithWebdavHandle(webdavHandle))
 	}
 	fproxy, err := xtproxy.NewXTProxy(opts...)
 	if err != nil {
