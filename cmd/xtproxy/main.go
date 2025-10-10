@@ -26,22 +26,23 @@ var ftpPort = 21
 var tftpPort = 69
 var httpPort = 80
 var webdavHandle = "/.webdav"
+var argMounts []string
+
 var defaultAddr = netip.MustParseAddr("::")
 var errUsage = errors.New("error usage")
 var envPrefix = "XTPROXY"
 
 type mountFs struct {
-	URL  *url.URL
-	Path string
-	Fs   afero.Fs
+	MPoint xtproxy.MountPoint
+	Fs     afero.Fs
 }
 
 var rootCmd = &cobra.Command{
 	Use:   "xtproxy",
 	Short: "xtproxy serves files with ftp/tftp",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		parseArgs()
-		return mainServe(args)
+	RunE: func(_ *cobra.Command, args []string) error {
+		parseArgs(args)
+		return mainServe()
 	},
 }
 
@@ -51,13 +52,16 @@ func fatal(err error) {
 	}
 }
 
-func parseArgs() {
+func parseArgs(args []string) {
 	debugFlag = viper.GetBool("debug")
 	ifacesListen = viper.GetStringSlice("ifaces-listen")
 	ftpPort = viper.GetInt("port-ftp")
 	tftpPort = viper.GetInt("port-tftp")
 	httpPort = viper.GetInt("port-http")
 	webdavHandle = viper.GetString("webdav-handle")
+	argMounts = viper.GetStringSlice("mounts")
+	// support mounts without -m flag: ./xtproxy "<url1> <path1>" "<url2> <path2>"
+	argMounts = append(argMounts, args...)
 }
 
 func bindArgs() {
@@ -93,6 +97,11 @@ func bindArgs() {
 	fatal(viper.BindPFlag(key, rootCmd.Flags().Lookup(key)))
 	viper.SetDefault(key, webdavHandle)
 
+	key = "mounts"
+	rootCmd.Flags().StringArrayVar(&argMounts, key, argMounts, "mount point \"<url> <path>\"")
+	fatal(viper.BindPFlag(key, rootCmd.Flags().Lookup(key)))
+	viper.SetDefault(key, []string{})
+
 	// disabled until testing
 	// rootCmd.Flags().BoolVar(&writableFlag, "writable", false, "allow uploading")
 
@@ -112,18 +121,15 @@ func bindArgs() {
 	viper.AutomaticEnv()
 }
 
-func setupMountFs(args []string) ([]mountFs, error) {
-	mounts := make([]mountFs, 0, len(args))
-	for _, arg := range args {
-		urlAndPath := strings.SplitN(arg, " ", 2)
-		if len(urlAndPath) != 2 {
-			return nil, fmt.Errorf("invalid arg expected <url> <path> got '%s': %w", arg, errUsage)
-		}
-		URL, err := url.Parse(urlAndPath[0])
-		if err != nil {
-			return nil, fmt.Errorf("invalid url '%s': %w: %w", urlAndPath[0], err, errUsage)
-		}
-		if URL.Scheme == "s3" {
+func setupMountFs() ([]mountFs, error) {
+	mountPoints, err := xtproxy.ParseMountPoints(argMounts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse mounts: %w", err)
+	}
+
+	mountFSes := make([]mountFs, 0, len(mountPoints))
+	for _, mp := range mountPoints {
+		if mp.URL.Scheme == "s3" {
 			s3creds, ok := os.LookupEnv("XTPROXY_S3_CREDENTIALS")
 			if !ok {
 				return nil, errors.New("missing XTPROXY_S3_CREDENTIALS=<access_key>:<secret>")
@@ -132,22 +138,21 @@ func setupMountFs(args []string) ([]mountFs, error) {
 			if len(userPass) != 2 {
 				return nil, errors.New("invalid XTPROXY_S3_CREDENTIALS=<access_key>:<secret>")
 			}
-			URL.User = url.UserPassword(userPass[0], userPass[1])
+			mp.URL.User = url.UserPassword(userPass[0], userPass[1])
 		}
-		fs, err := xtproxy.FsByURL(URL.String())
+		fs, err := xtproxy.FsByURL(mp.URL.String())
 		if err != nil {
-			return nil, fmt.Errorf("invalid fs url '%s': %w: %w", urlAndPath[0], err, errUsage)
+			return nil, fmt.Errorf("invalid fs url '%s': %w: %w", mp.URL, err, errUsage)
 		}
 		if debugFlag {
 			fs = &xtproxy.DebugFs{Fs: fs}
 		}
-		mounts = append(mounts, mountFs{
-			URL:  URL,
-			Fs:   fs,
-			Path: urlAndPath[1],
+		mountFSes = append(mountFSes, mountFs{
+			MPoint: mp,
+			Fs:     fs,
 		})
 	}
-	return mounts, nil
+	return mountFSes, nil
 }
 
 func setupListenAddrs() ([]netip.AddrPort, error) {
@@ -200,16 +205,9 @@ func masked(URL *url.URL) *url.URL {
 	return URL
 }
 
-func mainServe(args []string) error {
-	if len(args) == 0 {
-		mountVal, ok := os.LookupEnv("XTPROXY_S3_MOUNTS")
-		if !ok {
-			return fmt.Errorf("missing mounts via args or XTPROXY_S3_MOUNTS=<url> <path>: %w", errUsage)
-		}
-		args = []string{mountVal}
-	}
+func mainServe() error {
 	opts := make([]xtproxy.XTProxyOpt, 0)
-	mounts, err := setupMountFs(args)
+	mounts, err := setupMountFs()
 	if err != nil {
 		return err
 	}
@@ -219,8 +217,8 @@ func mainServe(args []string) error {
 		}
 	}
 	for _, m := range mounts {
-		log.Printf("mounts %s -> %s\n", masked(m.URL).String(), m.Path)
-		opts = append(opts, xtproxy.WithMount(m.Fs, m.Path))
+		log.Printf("mounts %s -> %s\n", masked(m.MPoint.URL).String(), m.MPoint.Path)
+		opts = append(opts, xtproxy.WithMount(m.Fs, m.MPoint.Path))
 	}
 	listenaddrs, err := setupListenAddrs()
 	if err != nil {
