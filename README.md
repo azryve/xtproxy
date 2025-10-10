@@ -42,11 +42,28 @@ It helps when:
 | `-i, --ifaces-listen` | `[]string` | Listen on addresses from specific interfaces                                                                                    | `XTPROXY_IFACES_LISTEN`  | *(none, can be provided multiple times)* |
 | `--webdav-handle`     | `string`      | WebDAV handle for HTTP server                                                                                                | `XTPROXY_WEBDAV_HANDLE`  | `"/.webdav"`                     |
 |  *(env only)*         | —             | Secret credentials for S3 access                                                                                             | `XTPROXY_S3_CREDENTIALS` | *(none; required if S3 is used)* |
+| `mounts`              | `[]string`    | Space-separated pairs of <url> <mount path>                                                                                  | `XTPROXY_MOUNTS`  | *(none, can be provided multiple times)* |
+
 
 xtproxy can be configured both by envs and cli arguments.
 In case when both are provided cli args take precedence over envs.
 
 ### Examples
+
+Run serving /tmp dir from mount path /tmp/
+```
+# via cli
+./xtproxy file:///tmp /tmp
+
+# via env
+XTPROXY_MOUNTS="file:///tmp /tmp" ./xtproxy
+```
+
+Serve two dirs from two handles /tmp/ and /backups/
+```
+./xtproxy file:///tmp /tmp  file:///var/backups/ /backups/
+```
+
 
 Listen only on addresses from specific interfaces
 ```
