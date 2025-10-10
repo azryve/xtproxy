@@ -15,6 +15,8 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
 
 var debugFlag bool
@@ -26,6 +28,7 @@ var httpPort = 80
 var webdavHandle = "/.webdav"
 var defaultAddr = netip.MustParseAddr("::")
 var errUsage = errors.New("error usage")
+var envPrefix = "XTPROXY"
 
 type mountFs struct {
 	URL  *url.URL
@@ -37,19 +40,76 @@ var rootCmd = &cobra.Command{
 	Use:   "xtproxy",
 	Short: "xtproxy serves files with ftp/tftp",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		parseArgs()
 		return mainServe(args)
 	},
 }
 
-func init() {
-	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debuging")
-	rootCmd.Flags().StringArrayVarP(&ifacesListen, "ifaces-listen", "i", []string{}, "listen all addreses on specific ifaces")
-	rootCmd.Flags().IntVar(&ftpPort, "port-ftp", ftpPort, "ftp tcp port")
-	rootCmd.Flags().IntVar(&tftpPort, "port-tftp", tftpPort, "tftp udp port")
-	rootCmd.Flags().IntVar(&httpPort, "port-http", httpPort, "http tcp port")
-	rootCmd.Flags().StringVar(&webdavHandle, "webdav-handle", webdavHandle, "webdav handle for http server")
+func fatal(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func parseArgs() {
+	debugFlag = viper.GetBool("debug")
+	ifacesListen = viper.GetStringSlice("ifaces-listen")
+	ftpPort = viper.GetInt("port-ftp")
+	tftpPort = viper.GetInt("port-tftp")
+	httpPort = viper.GetInt("port-http")
+	webdavHandle = viper.GetString("webdav-handle")
+}
+
+func bindArgs() {
+	var key string
+
+	key = "debug"
+	rootCmd.PersistentFlags().BoolVar(&debugFlag, key, false, "enable debuging")
+	fatal(viper.BindPFlag(key, rootCmd.PersistentFlags().Lookup(key)))
+	viper.SetDefault(key, false)
+
+	key = "ifaces-listen"
+	rootCmd.Flags().StringArrayVarP(&ifacesListen, key, "i", []string{}, "listen all addreses on specific ifaces")
+	fatal(viper.BindPFlag(key, rootCmd.Flags().Lookup(key)))
+	viper.SetDefault(key, []string{})
+
+	key = "port-ftp"
+	rootCmd.Flags().IntVar(&ftpPort, key, ftpPort, "ftp tcp port")
+	fatal(viper.BindPFlag(key, rootCmd.Flags().Lookup(key)))
+	viper.SetDefault(key, ftpPort)
+
+	key = "port-tftp"
+	rootCmd.Flags().IntVar(&tftpPort, key, tftpPort, "tftp udp port")
+	fatal(viper.BindPFlag(key, rootCmd.Flags().Lookup(key)))
+	viper.SetDefault(key, tftpPort)
+
+	key = "port-http"
+	rootCmd.Flags().IntVar(&httpPort, key, httpPort, "http tcp port")
+	fatal(viper.BindPFlag(key, rootCmd.Flags().Lookup(key)))
+	viper.SetDefault(key, httpPort)
+
+	key = "webdav-handle"
+	rootCmd.Flags().StringVar(&webdavHandle, key, webdavHandle, "webdav handle for http server")
+	fatal(viper.BindPFlag(key, rootCmd.Flags().Lookup(key)))
+	viper.SetDefault(key, webdavHandle)
+
 	// disabled until testing
 	// rootCmd.Flags().BoolVar(&writableFlag, "writable", false, "allow uploading")
+
+	envReplacer := strings.NewReplacer("-", "_")
+	envDecorator := func(f *pflag.Flag) {
+		name := strings.ToUpper(envPrefix + "_" + f.Name)
+		name = envReplacer.Replace(name)
+		tag := fmt.Sprintf(" (env %s)", name)
+		if !strings.Contains(f.Usage, tag) {
+			f.Usage += tag
+		}
+	}
+	rootCmd.PersistentFlags().VisitAll(envDecorator)
+	rootCmd.Flags().VisitAll(envDecorator)
+	viper.SetEnvPrefix(envPrefix)
+	viper.SetEnvKeyReplacer(envReplacer)
+	viper.AutomaticEnv()
 }
 
 func setupMountFs(args []string) ([]mountFs, error) {
@@ -196,4 +256,8 @@ func main() {
 		}
 		log.Fatal(err)
 	}
+}
+
+func init() {
+	bindArgs()
 }
