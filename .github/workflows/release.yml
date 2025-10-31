@@ -1,0 +1,106 @@
+name: Release xtproxy
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  IS_TEST_TAG: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-test') }}
+
+jobs:
+  build:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+
+      - name: Derive version from tag
+        id: meta
+        shell: bash
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+
+      - name: Build xtproxy
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          mkdir -p build
+          go build -trimpath \
+            -ldflags="-s -w -X 'main.Version=${VERSION}'" \
+            -o build/xtproxy ./cmd/xtproxy
+
+      - name: Package as os/arch/xtproxy (tar.gz)
+        run: |
+          set -euo pipefail
+          os="${{ matrix.goos }}"
+          arch="${{ matrix.goarch }}"
+          mkdir -p "staging/${os}/${arch}"
+          cp build/xtproxy "staging/${os}/${arch}/xtproxy"
+          mkdir -p dist
+          tar -C staging -czf "dist/xtproxy_${os}_${arch}.tar.gz" "${os}/${arch}"
+          echo "Created dist/xtproxy_${os}_${arch}.tar.gz"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xtproxy-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Flatten artifact layout
+        shell: bash
+        run: |
+          mkdir -p out
+          find dist -type f -name '*.tar.gz' -exec mv -t out {} +
+          ls -l out
+
+      - name: Checksums
+        working-directory: out
+        run: |
+          sha256sum *.tar.gz > checksums.txt
+          cat checksums.txt
+
+      - name: Create / Update Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: ${{ env.IS_TEST_TAG == 'true' }}
+          prerelease: ${{ env.IS_TEST_TAG == 'true' }}
+          files: |
+            out/*.tar.gz
+            out/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

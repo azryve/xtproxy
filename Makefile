@@ -1,4 +1,4 @@
-.PHONY: all generate clean xtproxy tests
+.PHONY: all generate clean xtproxy tests lint format
 
 all: xtproxy
 
@@ -8,5 +8,13 @@ clean:
 xtproxy:
 	go build ./cmd/xtproxy/
 
-tests:
-	go test ./pkg/...
+test:
+	go test -v ./...
+
+lint:
+	@go vet ./...
+	@gofmt -s -d .
+	@test -z $$(gofmt -s -l .)
+
+format:
+	@gofmt -s -w .
