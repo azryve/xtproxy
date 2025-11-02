@@ -247,6 +247,16 @@ func mainServe() error {
 	return fproxy.Wait()
 }
 
+// versionCmd represents the version command
+var Version = "dev"
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "print the version",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println(Version)
+	},
+}
+
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		if errors.Is(err, errUsage) {
@@ -258,4 +268,5 @@ func main() {
 
 func init() {
 	bindArgs()
+	rootCmd.AddCommand(versionCmd)
 }

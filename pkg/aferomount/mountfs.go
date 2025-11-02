@@ -44,7 +44,7 @@ func (m *MountFs) Name() string {
 
 func (m *MountFs) Mount(mountfs afero.Fs, path string) error {
 	apath := absPath(path)
-	afs := afero.Afero{m.base}
+	afs := afero.Afero{Fs: m.base}
 	dirExist, err := afs.DirExists(apath)
 	if err != nil {
 		return err
