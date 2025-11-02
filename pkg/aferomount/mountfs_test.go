@@ -12,19 +12,19 @@ func TestMountfsRootMount(t *testing.T) {
 	var afs afero.Afero
 
 	memfs1 := afero.NewMemMapFs()
-	afs = afero.Afero{memfs1}
+	afs = afero.Afero{Fs: memfs1}
 	assert.NoError(t, afs.MkdirAll("/a/b", 0755))
 	assert.NoError(t, afs.WriteFile("/a/file.txt", []byte("/a/file.txt: memfs1"), 0644))
 
 	memfs2 := afero.NewMemMapFs()
-	afs = afero.Afero{memfs2}
+	afs = afero.Afero{Fs: memfs2}
 	assert.NoError(t, afs.MkdirAll("/a/b", 0755))
 	assert.NoError(t, afs.WriteFile("/a/file.txt", []byte("/a/file.txt: memfs2"), 0644))
 
 	var err error
 	var expected string
 	mountfs := NewMountFS(afero.NewReadOnlyFs(afero.NewMemMapFs()))
-	afs = afero.Afero{mountfs}
+	afs = afero.Afero{Fs: mountfs}
 	_, err = afs.ReadFile("/a/file.txt")
 	assert.Error(t, err, "/a/file.txt should not exist")
 
@@ -56,15 +56,15 @@ func TestMountfsOverlappingMounts(t *testing.T) {
 	var afs afero.Afero
 
 	memfs1 := afero.NewMemMapFs()
-	afs = afero.Afero{memfs1}
+	afs = afero.Afero{Fs: memfs1}
 	assert.NoError(t, afs.WriteFile("/a/file.txt", []byte("/a/file.txt: memfs1"), 0644))
 
 	memfs2 := afero.NewMemMapFs()
-	afs = afero.Afero{memfs2}
+	afs = afero.Afero{Fs: memfs2}
 	assert.NoError(t, afs.WriteFile("/a/file.txt", []byte("/a/file.txt: memfs2"), 0644))
 
 	mountfs := NewMountFS(afero.NewMemMapFs())
-	afs = afero.Afero{mountfs}
+	afs = afero.Afero{Fs: mountfs}
 
 	var err error
 	var got []byte
@@ -81,10 +81,10 @@ func TestMountDirCreated(t *testing.T) {
 	var afs afero.Afero
 
 	memfs1 := afero.NewMemMapFs()
-	afs = afero.Afero{memfs1}
+	afs = afero.Afero{Fs: memfs1}
 	assert.NoError(t, afs.WriteFile("/file.txt", []byte("/file.txt: memfs1"), 0644))
 	mountfs := NewMountFS(afero.NewMemMapFs())
-	afs = afero.Afero{mountfs}
+	afs = afero.Afero{Fs: mountfs}
 
 	exists, err := afs.DirExists("/a")
 	assert.NoError(t, err)
@@ -109,10 +109,10 @@ func TestMountDirExisted(t *testing.T) {
 	var afs afero.Afero
 
 	memfs1 := afero.NewMemMapFs()
-	afs = afero.Afero{memfs1}
+	afs = afero.Afero{Fs: memfs1}
 	assert.NoError(t, afs.WriteFile("/file.txt", []byte("/file.txt: memfs1"), 0644))
 	mountfs := NewMountFS(afero.NewMemMapFs())
-	afs = afero.Afero{mountfs}
+	afs = afero.Afero{Fs: mountfs}
 	afs.MkdirAll("/a", 0777)
 
 	exists, err := afs.DirExists("/a")
@@ -139,7 +139,7 @@ func TestMountDirCreatedOverlap(t *testing.T) {
 	memfs2 := afero.NewMemMapFs()
 
 	mountfs := NewMountFS(afero.NewMemMapFs())
-	afs := afero.Afero{mountfs}
+	afs := afero.Afero{Fs: mountfs}
 
 	assert.NoError(t, mountfs.Mount(memfs1, "/"))
 	assert.NoError(t, mountfs.Mount(memfs2, "/a"))

@@ -124,8 +124,8 @@ func (m httpURL) Fs() (afero.Fs, error) {
 	if err != nil {
 		return nil, err
 	}
-	fs = &fsTrimPrefix{fs}
-	afs := &afero.FromIOFS{fs}
+	fs = &fsTrimPrefix{FS: fs}
+	afs := &afero.FromIOFS{FS: fs}
 	return afs, nil
 }
 
