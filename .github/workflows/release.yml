@@ -51,40 +51,47 @@ jobs:
             -ldflags="-s -w -X 'main.Version=${VERSION}'" \
             -o build/xtproxy ./cmd/xtproxy
 
-      - name: Package as os/arch/xtproxy (tar.gz)
+      - name: Stage as os/arch/xtproxy
         run: |
-          set -euo pipefail
           os="${{ matrix.goos }}"
           arch="${{ matrix.goarch }}"
           mkdir -p "staging/${os}/${arch}"
           cp build/xtproxy "staging/${os}/${arch}/xtproxy"
-          mkdir -p dist
-          tar -C staging -czf "dist/xtproxy_${os}_${arch}.tar.gz" "${os}/${arch}"
-          echo "Created dist/xtproxy_${os}_${arch}.tar.gz"
 
-      - name: Upload build artifacts
+      - name: Upload staged artifact
         uses: actions/upload-artifact@v4
         with:
           name: xtproxy-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*.tar.gz
+          path: staging/
           if-no-files-found: error
 
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: build
+
     steps:
-      - name: Download all artifacts
+      - name: Download all staged artifacts (merge)
         uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: bundle
+          merge-multiple: true
 
-      - name: Flatten artifact layout
+      - name: Make single archive with os/arch/xtproxy layout
+        id: pack
         shell: bash
         run: |
+          set -euo pipefail
+          # Optional: show the tree we’ll archive
+          echo "Bundle contents:"
+          find bundle -maxdepth 4 -type f -print | sort
+
           mkdir -p out
-          find dist -type f -name '*.tar.gz' -exec mv -t out {} +
-          ls -l out
+          # The downloaded content is at bundle/staging/<os>/<arch>/xtproxy
+          # Switching -C into 'bundle/staging' ensures archive root is <os>/<arch>/xtproxy
+          ver="${GITHUB_REF_NAME#v}"
+          tar -C bundle/staging -czf "out/xtproxy_${ver}.tar.gz" .
+          echo "archive=xtproxy_${ver}.tar.gz" >> "$GITHUB_OUTPUT"
 
       - name: Checksums
         working-directory: out
@@ -100,7 +107,7 @@ jobs:
           draft: ${{ env.IS_TEST_TAG == 'true' }}
           prerelease: ${{ env.IS_TEST_TAG == 'true' }}
           files: |
-            out/*.tar.gz
+            out/${{ steps.pack.outputs.archive }}
             out/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
