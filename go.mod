@@ -11,8 +11,8 @@ require (
 	github.com/hairyhenderson/go-fsimpl v0.1.7
 	github.com/pin/tftp v2.1.0+incompatible
 	github.com/spf13/afero v1.15.0
-	github.com/spf13/cobra v1.8.1
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/cobra v1.9.1
+	github.com/spf13/pflag v1.0.7
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
 	github.com/studio-b12/gowebdav v0.9.0
