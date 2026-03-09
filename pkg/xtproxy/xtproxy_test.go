@@ -60,11 +60,11 @@ func TestHTTPToHTTP(t *testing.T) {
 	io.Copy(&buf, r.Body)
 	assert.Equal(t, "file contents", buf.String())
 
-	// missing file - will return 500 for now
+	// missing file
 	url = fmt.Sprintf("http://%s/missing.txt", addr.String())
 	r, err = httpc.Get(url)
 	assert.NoError(t, err)
-	assert.Equal(t, 500, r.StatusCode)
+	assert.Equal(t, 404, r.StatusCode)
 }
 
 func TestHTTPToWebdav(t *testing.T) {
@@ -91,11 +91,11 @@ func TestHTTPToWebdav(t *testing.T) {
 	io.Copy(&buf, r.Body)
 	assert.Equal(t, "file contents", buf.String())
 
-	// missing file - will return 500 for now
+	// missing file
 	url = fmt.Sprintf("http://%s/missing.txt", addr.String())
 	r, err = httpc.Get(url)
 	assert.NoError(t, err)
-	assert.Equal(t, 500, r.StatusCode)
+	assert.Equal(t, 404, r.StatusCode)
 }
 
 func xtproxyHttpProxyForTest(t *testing.T, fs afero.Fs, webdavHandle string) (*XTProxy, net.Addr) {

@@ -1,6 +1,7 @@
 package aferowebdav
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -37,7 +38,14 @@ func (m *File) Name() string {
 }
 
 func (m *File) Stat() (os.FileInfo, error) {
-	return m.c.Stat(m.name)
+	fi, err := m.c.Stat(m.name)
+	if err != nil {
+		if gowebdav.IsErrNotFound(err) {
+			// return 404 instead of 500
+			err = fmt.Errorf("%w: %v", afero.ErrFileNotFound, err)
+		}
+	}
+	return fi, err
 }
 
 func (m *File) Read(p []byte) (int, error) {
