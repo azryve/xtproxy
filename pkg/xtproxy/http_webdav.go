@@ -1,12 +1,14 @@
 package xtproxy
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
 	"mime"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -124,9 +126,10 @@ func (m httpURL) Fs() (afero.Fs, error) {
 	if err != nil {
 		return nil, err
 	}
-	fs = &fsTrimPrefix{FS: fs}
-	afs := &afero.FromIOFS{FS: fs}
-	return afs, nil
+	fs = &fsTrimPrefix{fs}
+	afs := &afero.FromIOFS{fs}
+	res := &fsFixFileNotExists{afs}
+	return res, nil
 }
 
 // by default httpfs expects non-absolute path
@@ -140,6 +143,39 @@ func (m *fsTrimPrefix) Open(name string) (fs.File, error) {
 	return m.FS.Open(strings.TrimPrefix(name, "/"))
 }
 
+// Returns 404 instead of 500 for absent file.
+type fsFixFileNotExists struct {
+	afero.Fs
+}
+
+func (m *fsFixFileNotExists) Open(name string) (afero.File, error) {
+	f, err := m.Fs.Open(name)
+	if err != nil {
+		return nil, normalizeNotFound(err)
+	}
+	return &fileFixFileNotExists{File: f}, nil
+}
+
+type fileFixFileNotExists struct {
+	afero.File
+}
+
+func (m *fileFixFileNotExists) Stat() (os.FileInfo, error) {
+	fi, err := m.File.Stat()
+	return fi, normalizeNotFound(err)
+}
+
+func normalizeNotFound(err error) error {
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(err.Error(), "status 404") {
+		return fmt.Errorf("%w: %v", afero.ErrFileNotFound, err)
+	}
+	return err
+}
+
+// webdavURL
 type webdavURL struct {
 	URL *url.URL
 }
